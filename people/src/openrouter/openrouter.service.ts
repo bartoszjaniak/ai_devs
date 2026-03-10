@@ -16,8 +16,7 @@ export class OpenRouterService {
 
   get defaultModel(): string {
     return (
-      this.configService.get<string>('OPENROUTER_MODEL') ??
-      'openai/gpt-4o-mini'
+      this.configService.get<string>('OPENROUTER_MODEL') ?? 'openai/gpt-4o-mini'
     );
   }
 

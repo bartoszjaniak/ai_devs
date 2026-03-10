@@ -5,10 +5,7 @@ import { AppService } from './app.service';
 import { AgentModule } from './agent/agent.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    AgentModule,
-  ],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), AgentModule],
   controllers: [AppController],
   providers: [AppService],
 })
