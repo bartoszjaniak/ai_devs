@@ -13,7 +13,9 @@ describe('AgentService', () => {
     summarisePersonSkill = {
       execute: jest
         .fn()
-        .mockResolvedValue('[Skill result] No additional data found for "Ada Lovelace"'),
+        .mockResolvedValue(
+          '[Skill result] No additional data found for "Ada Lovelace"',
+        ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
