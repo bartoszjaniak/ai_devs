@@ -1,0 +1,9 @@
+# Environment secrets – never commit the real .env
+.env
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
