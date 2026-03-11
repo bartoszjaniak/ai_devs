@@ -1,42 +1,51 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OpenRouterService } from '../openrouter/openrouter.service';
-import { SummarisePersonSkill } from '../skills/summarise-person.skill';
-import { peopleAgentSystemPrompt } from '../prompts/people-agent.prompt';
-import { ChatMessage } from '../openrouter/openrouter.types';
+import { FilterPeopleSkill } from '../skills/filter-people.skill';
+import { TagJobsSkill } from '../skills/tag-jobs.skill';
+import { SelectTransportSkill } from '../skills/select-transport.skill';
 
 @Injectable()
 export class AgentService {
   private readonly logger = new Logger(AgentService.name);
 
   constructor(
-    private readonly openRouter: OpenRouterService,
-    private readonly summarisePersonSkill: SummarisePersonSkill,
+    private readonly filterPeopleSkill: FilterPeopleSkill,
+    private readonly tagJobsSkill: TagJobsSkill,
+    private readonly selectTransportSkill: SelectTransportSkill,
   ) {}
 
   /**
-   * Run a single-turn agent:
-   * 1. Execute the summarise_person skill to gather context.
-   * 2. Send the system prompt + skill result + user question to the LLM.
-   * 3. Return the model's response.
+   * Run the people-task pipeline:
+   * 1. Fetch and filter people by fixed criteria.
+   * 2. Tag jobs via LLM with structured output JSON schema.
+   * 3. Select people tagged with "transport".
+   * 4. Return JSON payload with matching records.
    */
-  async run(personName: string, userQuestion: string): Promise<string> {
-    this.logger.log(`Agent started for person: "${personName}"`);
+  async run(_personName: string, _userQuestion: string): Promise<string> {
+    this.logger.log('People task pipeline started');
 
-    // Step 1 – use skill to gather additional context
-    const skillResult = await this.summarisePersonSkill.execute(personName);
-    this.logger.debug(`Skill result: ${skillResult}`);
+    const filteredPeople = await this.filterPeopleSkill.execute();
+    this.logger.log(`Filtered people count: ${filteredPeople.length}`);
 
-    // Step 2 – build messages and call the LLM
-    const messages: ChatMessage[] = [
-      { role: 'system', content: peopleAgentSystemPrompt },
+    const taggedPeople = await this.tagJobsSkill.execute(filteredPeople);
+    this.logger.log(`Tagged people count: ${taggedPeople.length}`);
+
+    const transportPeople = this.selectTransportSkill.execute(taggedPeople);
+    this.logger.log(`Transport people count: ${transportPeople.length}`);
+
+    return JSON.stringify(
       {
-        role: 'user',
-        content: `Additional context from tool:\n${skillResult}\n\nQuestion: ${userQuestion}`,
+        criteria: {
+          gender: 'male',
+          birthPlace: 'Grudziądz',
+          ageRange: [20, 40],
+          referenceYear: 2026,
+          requiredTag: 'transport',
+        },
+        totalMatches: transportPeople.length,
+        people: transportPeople,
       },
-    ];
-
-    const answer = await this.openRouter.chat(messages);
-    this.logger.log(`Agent finished. Answer length: ${answer.length}`);
-    return answer;
+      null,
+      2,
+    );
   }
 }

@@ -1,28 +1,45 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AgentService } from './agent.service';
-import { OpenRouterService } from '../openrouter/openrouter.service';
-import { SummarisePersonSkill } from '../skills/summarise-person.skill';
+import { FilterPeopleSkill } from '../skills/filter-people.skill';
+import { TagJobsSkill } from '../skills/tag-jobs.skill';
+import { SelectTransportSkill } from '../skills/select-transport.skill';
 
 describe('AgentService', () => {
   let service: AgentService;
-  let openRouterService: { chat: jest.Mock };
-  let summarisePersonSkill: { execute: jest.Mock };
+  let filterPeopleSkill: { execute: jest.Mock };
+  let tagJobsSkill: { execute: jest.Mock };
+  let selectTransportSkill: { execute: jest.Mock };
+
+  const filteredPeople = [
+    {
+      name: 'Jan',
+      surname: 'Kowalski',
+      gender: 'M',
+      birthDate: '1995-01-01',
+      birthPlace: 'Grudziądz',
+      birthCountry: 'Polska',
+      job: 'Prowadzi ciężarówki i planuje trasy logistyczne.',
+    },
+  ];
+
+  const taggedPeople = [
+    {
+      ...filteredPeople[0],
+      tags: ['transport'],
+    },
+  ];
 
   beforeEach(async () => {
-    openRouterService = { chat: jest.fn().mockResolvedValue('Mocked answer') };
-    summarisePersonSkill = {
-      execute: jest
-        .fn()
-        .mockResolvedValue(
-          '[Skill result] No additional data found for "Ada Lovelace"',
-        ),
-    };
+    filterPeopleSkill = { execute: jest.fn().mockResolvedValue(filteredPeople) };
+    tagJobsSkill = { execute: jest.fn().mockResolvedValue(taggedPeople) };
+    selectTransportSkill = { execute: jest.fn().mockReturnValue(taggedPeople) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentService,
-        { provide: OpenRouterService, useValue: openRouterService },
-        { provide: SummarisePersonSkill, useValue: summarisePersonSkill },
+        { provide: FilterPeopleSkill, useValue: filterPeopleSkill },
+        { provide: TagJobsSkill, useValue: tagJobsSkill },
+        { provide: SelectTransportSkill, useValue: selectTransportSkill },
       ],
     }).compile();
 
@@ -33,18 +50,17 @@ describe('AgentService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should call the skill and openrouter, then return the answer', async () => {
+  it('should execute skills pipeline and return JSON with transport people', async () => {
     const answer = await service.run('Ada Lovelace', 'Who was she?');
+    const parsed = JSON.parse(answer) as {
+      totalMatches: number;
+      people: Array<{ tags: string[] }>;
+    };
 
-    expect(summarisePersonSkill.execute).toHaveBeenCalledWith('Ada Lovelace');
-    expect(openRouterService.chat).toHaveBeenCalledTimes(1);
-    // The messages passed to chat should contain a system message and a user message
-    const [messages] = openRouterService.chat.mock.calls[0] as [
-      Array<{ role: string; content: string }>,
-    ];
-    expect(messages[0].role).toBe('system');
-    expect(messages[1].role).toBe('user');
-    expect(messages[1].content).toContain('Who was she?');
-    expect(answer).toBe('Mocked answer');
+    expect(filterPeopleSkill.execute).toHaveBeenCalledTimes(1);
+    expect(tagJobsSkill.execute).toHaveBeenCalledWith(filteredPeople);
+    expect(selectTransportSkill.execute).toHaveBeenCalledWith(taggedPeople);
+    expect(parsed.totalMatches).toBe(1);
+    expect(parsed.people[0].tags).toContain('transport');
   });
 });

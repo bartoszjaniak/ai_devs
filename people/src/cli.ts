@@ -1,30 +1,23 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { AgentService } from './agent/agent.service';
+import { PeopleTaskService } from './people-task/people-task.service';
 
 async function main() {
-  const args = process.argv.slice(2);
-
-  const personIndex = args.indexOf('--person');
-  const questionIndex = args.indexOf('--question');
-
-  const person =
-    personIndex !== -1 && args[personIndex + 1]
-      ? args[personIndex + 1]
-      : 'Unknown';
-  const question =
-    questionIndex !== -1 && args[questionIndex + 1]
-      ? args[questionIndex + 1]
-      : 'Tell me about this person.';
+  console.log('🚀 Starting people pipeline...');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
-    logger: ['error', 'warn'],
+    logger: ['log', 'error', 'warn'],
   });
 
-  const agentService = app.get(AgentService);
-  const answer = await agentService.run(person, question);
+  const peopleTaskService = app.get(PeopleTaskService);
+  const answer = await peopleTaskService.run();
 
-  console.log(answer);
+  const result = answer as { totalSubmitted: number; verifyResponse: unknown };
+
+  console.log('✅ Pipeline finished successfully');
+  console.log(`📦 Submitted records: ${result.totalSubmitted}`);
+  console.log('📨 Server response:');
+  console.log(JSON.stringify(result.verifyResponse, null, 2));
 
   await app.close();
 }

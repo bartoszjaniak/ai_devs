@@ -3,11 +3,21 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ResponseFormatJsonSchema {
+  type: 'json_schema';
+  json_schema: {
+    name: string;
+    strict: boolean;
+    schema: Record<string, unknown>;
+  };
+}
+
 export interface ChatCompletionRequest {
   model: string;
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
+  response_format?: ResponseFormatJsonSchema;
 }
 
 export interface ChatCompletionResponse {

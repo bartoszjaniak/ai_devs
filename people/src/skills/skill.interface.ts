@@ -1,5 +1,5 @@
-export interface Skill {
+export interface Skill<TInput = string, TOutput = string> {
   name: string;
   description: string;
-  execute(input: string): Promise<string>;
+  execute(input: TInput): Promise<TOutput> | TOutput;
 }
