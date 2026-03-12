@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { resolve } from 'path';
 import { AgentModule } from './agent/agent.module';
+import { ConsoleMessageFormatterService } from './logger/console-message-formatter.service';
 
 @Module({
   imports: [
@@ -14,5 +15,6 @@ import { AgentModule } from './agent/agent.module';
     }),
     AgentModule,
   ],
+  providers: [ConsoleMessageFormatterService],
 })
 export class AppModule {}

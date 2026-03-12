@@ -1,4 +1,5 @@
 import axios from "axios";
+import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 type ToolDefinition = {
   type: "function";
@@ -15,6 +16,8 @@ type ToolDefinition = {
 
 const LOCATIONS_FILE_NAME = "findhim_locations.json";
 const HUB_BASE_URL = "https://hub.ag3nts.org/data";
+const TOOL_NAME = "get_power_plants";
+const formatter = new ConsoleMessageFormatterService();
 
 function getCourseApiKey(): string {
   const apiKey = process.env.COURSE_API_KEY;
@@ -49,8 +52,30 @@ export const tools: ToolDefinition[] = [
 
 export const handlers = {
   async get_power_plants(): Promise<unknown> {
-    const url = buildLocationsUrl();
-    const response = await axios.get(url);
-    return response.data;
+    formatter.log({
+      type: "tool",
+      details: TOOL_NAME,
+      message: "Input: {}",
+    });
+
+    try {
+      const url = buildLocationsUrl();
+      const response = await axios.get(url);
+
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Output: ${JSON.stringify(response.data)}`,
+      });
+
+      return response.data;
+    } catch (error: unknown) {
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      throw error;
+    }
   },
 };

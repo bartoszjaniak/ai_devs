@@ -1,14 +1,13 @@
-import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AgentService } from './agent/agent.service';
+import { ConsoleMessageFormatterService } from './logger/console-message-formatter.service';
 
 function readQuestionFromArgs(): string {
   return process.argv.slice(2).join(' ').trim();
 }
 
 export async function main(): Promise<void> {
-  const logger = new Logger('CLI');
   const question = readQuestionFromArgs();
 
   if (!question) {
@@ -22,10 +21,15 @@ export async function main(): Promise<void> {
 
   try {
     const agentService = app.get(AgentService);
+    const formatter = app.get(ConsoleMessageFormatterService);
+
+    formatter.log({ type: 'user', message: question });
     const result = await agentService.ask(question);
 
-    logger.log('Model response:');
-    console.log(JSON.stringify(result, null, 2));
+    formatter.log({
+      type: 'agent',
+      message: JSON.stringify(result, null, 2),
+    });
   } finally {
     await app.close();
   }

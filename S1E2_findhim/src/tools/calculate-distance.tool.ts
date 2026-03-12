@@ -1,3 +1,5 @@
+import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
+
 type ToolDefinition = {
   type: "function";
   name: string;
@@ -19,6 +21,8 @@ interface DistanceInput {
 }
 
 const EARTH_RADIUS_KM = 6371;
+const TOOL_NAME = "calculate_distance";
+const formatter = new ConsoleMessageFormatterService();
 
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
@@ -122,12 +126,34 @@ export const handlers = {
     distance_km: number;
     distance_m: number;
   } {
-    const input = parseInput(args);
-    const distanceKm = calculateHaversineDistanceKm(input);
+    formatter.log({
+      type: "tool",
+      details: TOOL_NAME,
+      message: `Input: ${JSON.stringify(args)}`,
+    });
 
-    return {
-      distance_km: distanceKm,
-      distance_m: distanceKm * 1000,
-    };
+    try {
+      const input = parseInput(args);
+      const distanceKm = calculateHaversineDistanceKm(input);
+      const result = {
+        distance_km: distanceKm,
+        distance_m: distanceKm * 1000,
+      };
+
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Output: ${JSON.stringify(result)}`,
+      });
+
+      return result;
+    } catch (error: unknown) {
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      throw error;
+    }
   },
 };

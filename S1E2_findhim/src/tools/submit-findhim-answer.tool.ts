@@ -1,4 +1,5 @@
 import axios from "axios";
+import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 type ToolDefinition = {
   type: "function";
@@ -22,6 +23,8 @@ interface FindHimAnswer {
 
 const VERIFY_API_URL = "https://hub.ag3nts.org/verify";
 const FINDHIM_TASK_NAME = "findhim";
+const TOOL_NAME = "submit_findhim_answer";
+const formatter = new ConsoleMessageFormatterService();
 
 function getCourseApiKey(): string {
   const apiKey = process.env.COURSE_API_KEY;
@@ -94,27 +97,50 @@ export const tools: ToolDefinition[] = [
 
 export const handlers = {
   async submit_findhim_answer(args: Record<string, unknown>): Promise<unknown> {
-    const answer = parseAnswer(args);
-    const apiKey = getCourseApiKey();
+    formatter.log({
+      type: "tool",
+      details: TOOL_NAME,
+      message: `Input: ${JSON.stringify(args)}`,
+    });
 
-    const response = await axios.post<unknown>(
-      VERIFY_API_URL,
-      {
-        apikey: apiKey,
-        task: FINDHIM_TASK_NAME,
-        answer,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
+    try {
+      const answer = parseAnswer(args);
+      const apiKey = getCourseApiKey();
+
+      const response = await axios.post<unknown>(
+        VERIFY_API_URL,
+        {
+          apikey: apiKey,
+          task: FINDHIM_TASK_NAME,
+          answer,
         },
-        validateStatus: () => true,
-      },
-    );
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          validateStatus: () => true,
+        },
+      );
 
-    return {
-      status: response.status,
-      data: response.data,
-    };
+      const result = {
+        status: response.status,
+        data: response.data,
+      };
+
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Output: ${JSON.stringify(result)}`,
+      });
+
+      return result;
+    } catch (error: unknown) {
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      throw error;
+    }
   },
 };

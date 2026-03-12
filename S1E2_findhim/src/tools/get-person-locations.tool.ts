@@ -1,4 +1,5 @@
 import axios from "axios";
+import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 type ToolDefinition = {
   type: "function";
@@ -19,6 +20,8 @@ interface PersonIdentity {
 }
 
 const LOCATION_API_URL = "https://hub.ag3nts.org/api/location";
+const TOOL_NAME = "get_person_locations";
+const formatter = new ConsoleMessageFormatterService();
 
 function getCourseApiKey(): string {
   const apiKey = process.env.COURSE_API_KEY;
@@ -73,23 +76,44 @@ export const tools: ToolDefinition[] = [
 
 export const handlers = {
   async get_person_locations(args: Record<string, unknown>): Promise<unknown> {
-    const identity = validateIdentity(args);
-    const apiKey = getCourseApiKey();
+    formatter.log({
+      type: "tool",
+      details: TOOL_NAME,
+      message: `Input: ${JSON.stringify(args)}`,
+    });
 
-    const response = await axios.post(
-      LOCATION_API_URL,
-      {
-        apikey: apiKey,
-        name: identity.name,
-        surname: identity.surname,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
+    try {
+      const identity = validateIdentity(args);
+      const apiKey = getCourseApiKey();
+
+      const response = await axios.post(
+        LOCATION_API_URL,
+        {
+          apikey: apiKey,
+          name: identity.name,
+          surname: identity.surname,
         },
-      },
-    );
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
 
-    return response.data;
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Output: ${JSON.stringify(response.data)}`,
+      });
+
+      return response.data;
+    } catch (error: unknown) {
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      throw error;
+    }
   },
 };

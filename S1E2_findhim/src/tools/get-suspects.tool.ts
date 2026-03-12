@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 interface Suspect {
   name: string;
@@ -24,6 +25,8 @@ type ToolDefinition = {
 };
 
 const SUSPECTS_FILE_PATH = resolve(process.cwd(), "..", "suspects.json");
+const TOOL_NAME = "get_suspects";
+const formatter = new ConsoleMessageFormatterService();
 
 export const tools: ToolDefinition[] = [
   {
@@ -42,7 +45,30 @@ export const tools: ToolDefinition[] = [
 
 export const handlers = {
   get_suspects(): Suspect[] {
-    const fileContent = readFileSync(SUSPECTS_FILE_PATH, "utf8");
-    return JSON.parse(fileContent) as Suspect[];
+    formatter.log({
+      type: "tool",
+      details: TOOL_NAME,
+      message: "Input: {}",
+    });
+
+    try {
+      const fileContent = readFileSync(SUSPECTS_FILE_PATH, "utf8");
+      const result = JSON.parse(fileContent) as Suspect[];
+
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Output: ${JSON.stringify(result)}`,
+      });
+
+      return result;
+    } catch (error: unknown) {
+      formatter.log({
+        type: "tool",
+        details: TOOL_NAME,
+        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      throw error;
+    }
   },
 };
