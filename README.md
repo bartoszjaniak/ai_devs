@@ -18,6 +18,7 @@ Repozytorium zawiera rozwiązania zadań z kursu **AI Devs**.
 | Folder   | Opis                                               |
 | -------- | -------------------------------------------------- |
 | `people` | Pierwsze zadanie – przykład agenta NestJS + OpenRouter |
+| `S1E2_findhim` | Lekki boilerplate CLI NestJS + OpenRouter Responses + schema output |
 
 ## Wymagania
 
