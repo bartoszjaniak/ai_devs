@@ -36,7 +36,7 @@ export const tools: ToolDefinition[] = [
     type: "function",
     name: "get_power_plants",
     description:
-      "Fetches a complete list of power plants and their geographic coordinates (latitude and longitude) from the AG3NTS course dataset.",
+      "Fetches a list of power plants with metadata from the AG3NTS course dataset, including active status, power output, and plant code.",
     parameters: {
       type: "object",
       properties: {},
