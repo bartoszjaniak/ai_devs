@@ -1,5 +1,4 @@
 import axios from "axios";
-import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 type ToolDefinition = {
   type: "function";
@@ -16,8 +15,19 @@ type ToolDefinition = {
 
 const LOCATIONS_FILE_NAME = "findhim_locations.json";
 const HUB_BASE_URL = "https://hub.ag3nts.org/data";
-const TOOL_NAME = "get_power_plants";
-const formatter = new ConsoleMessageFormatterService();
+
+interface RawPowerPlantRecord {
+  is_active: boolean;
+  power: string;
+  code: string;
+}
+
+interface NormalizedPowerPlant {
+  city: string;
+  code: string;
+  isActive: boolean;
+  power: string;
+}
 
 function getCourseApiKey(): string {
   const apiKey = process.env.COURSE_API_KEY;
@@ -39,11 +49,16 @@ export const tools: ToolDefinition[] = [
     type: "function",
     name: "get_power_plants",
     description:
-      "Fetches a list of power plants with metadata from the AG3NTS course dataset, including active status, power output, and plant code.",
+      "Fetches the full power plant dataset and returns a normalized array of plants with city, plant code, active flag, and power. Call this once and use the result for batched coordinate and distance calculations.",
     parameters: {
       type: "object",
-      properties: {},
-      required: [],
+      properties: {
+        confidence: {
+          type: "number",
+          description: "Agent's confidence (0.0–1.0) that this tool should be used for the current task.",
+        },
+      },
+      required: ["confidence"],
       additionalProperties: false,
     },
     strict: true,
@@ -51,31 +66,25 @@ export const tools: ToolDefinition[] = [
 ];
 
 export const handlers = {
-  async get_power_plants(): Promise<unknown> {
-    formatter.log({
-      type: "tool",
-      details: TOOL_NAME,
-      message: "Input: {}",
-    });
+  async get_power_plants(): Promise<{
+    powerPlants: NormalizedPowerPlant[];
+    count: number;
+    summary: string;
+  }> {
+    const url = buildLocationsUrl();
+    const response = await axios.get<{ power_plants?: Record<string, RawPowerPlantRecord> }>(url);
+    const rawPlants = response.data.power_plants ?? {};
+    const powerPlants = Object.entries(rawPlants).map(([city, plant]) => ({
+      city,
+      code: plant.code,
+      isActive: plant.is_active,
+      power: plant.power,
+    }));
 
-    try {
-      const url = buildLocationsUrl();
-      const response = await axios.get(url);
-
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Output: ${JSON.stringify(response.data)}`,
-      });
-
-      return response.data;
-    } catch (error: unknown) {
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
-      });
-      throw error;
-    }
+    return {
+      powerPlants,
+      count: powerPlants.length,
+      summary: `Pobrano ${powerPlants.length} elektrowni z kodami i miastami do dalszego batchowego przetwarzania.`,
+    };
   },
 };

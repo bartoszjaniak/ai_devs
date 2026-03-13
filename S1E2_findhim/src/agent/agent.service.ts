@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { AGENT_SYSTEM_PROMPT } from '../prompts/agent.prompt';
 import { OpenRouterService } from '../openrouter/openrouter.service';
+import { ConsoleMessageFormatterService } from '../logger/console-message-formatter.service';
 import { AgentAnswer } from './models/agent-answer.model';
 import { ResponsesInputItem } from '../openrouter/openrouter.types';
 import { handlers, tools } from '../tools';
 
-const MAX_TOOL_STEPS = 5;
+const MAX_TOOL_STEPS = 20;
 
 type ToolHandler = (...args: unknown[]) => unknown | Promise<unknown>;
 
@@ -13,6 +14,8 @@ type ToolHandlersMap = Record<string, ToolHandler>;
 
 @Injectable()
 export class AgentService {
+  private readonly formatter = new ConsoleMessageFormatterService();
+
   constructor(private readonly openRouterService: OpenRouterService) {}
 
   async ask(question: string): Promise<AgentAnswer> {
@@ -20,6 +23,7 @@ export class AgentService {
       { role: 'system', content: AGENT_SYSTEM_PROMPT },
       { role: 'user', content: question },
     ];
+    let latestVerifyMessage: string | null = null;
     let stepsRemaining = MAX_TOOL_STEPS;
 
     while (stepsRemaining > 0) {
@@ -35,18 +39,56 @@ export class AgentService {
 
       if (toolCalls.length === 0) {
         const finalText = this.openRouterService.extractText(response);
-        return this.toAgentAnswer(finalText);
+        const parsed = this.toAgentAnswer(finalText);
+
+        if (latestVerifyMessage) {
+          return {
+            answer: latestVerifyMessage,
+            confidence: parsed.confidence,
+          };
+        }
+
+        // For findhim flow we require verify output before allowing final answer.
+        input = [
+          ...input,
+          {
+            role: 'user',
+            content:
+              'Brak wyniku verify. Zanim zakonczysz, musisz wywolac submit_findhim_answer i dopiero potem zwrocic finalny JSON z odpowiedzia z verify.',
+          },
+        ];
+        continue;
       }
 
-      const toolResultMessages = await Promise.all(
+      const toolResults = await Promise.all(
         toolCalls.map(async (toolCall) => {
           const output = await this.executeTool(toolCall.name, toolCall.arguments);
+          const verifyMessage =
+            toolCall.name === 'submit_findhim_answer' &&
+            output !== null &&
+            typeof output === 'object' &&
+            'verifyMessage' in (output as object) &&
+            typeof (output as Record<string, unknown>).verifyMessage === 'string'
+              ? String((output as Record<string, unknown>).verifyMessage)
+              : null;
+
           return {
-            role: 'user' as const,
-            content: `TOOL_RESULT ${toolCall.name}: ${JSON.stringify(output)}`,
+            message: {
+              role: 'user' as const,
+              content: `TOOL_RESULT ${toolCall.name}: ${JSON.stringify(output)}`,
+            },
+            verifyMessage,
           };
         }),
       );
+
+      const toolResultMessages = toolResults.map((result) => result.message);
+
+      for (const result of toolResults) {
+        if (result.verifyMessage) {
+          latestVerifyMessage = result.verifyMessage;
+        }
+      }
 
       input = [...input, ...toolResultMessages];
     }
@@ -65,11 +107,24 @@ export class AgentService {
       throw new Error(`Unknown tool requested by model: ${toolName}`);
     }
 
-    if (Object.keys(args).length === 0) {
-      return handler();
-    }
+    const output = await (Object.keys(args).length === 0 ? handler() : handler(args));
 
-    return handler(args);
+    const summary =
+      output !== null &&
+      typeof output === 'object' &&
+      'summary' in (output as object)
+        ? String((output as Record<string, unknown>).summary)
+        : `Wywołano narzędzie ${toolName}`;
+
+    const confidence = typeof args.confidence === 'number' ? args.confidence : null;
+    const detailLabel =
+      confidence !== null
+        ? `${toolName} | pewność: ${(confidence * 100).toFixed(0)}%`
+        : toolName;
+
+    this.formatter.log({ type: 'tool', details: detailLabel, message: summary });
+
+    return output;
   }
 
   private toAgentAnswer(text: string): AgentAnswer {

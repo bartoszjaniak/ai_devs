@@ -1,5 +1,4 @@
 import axios from "axios";
-import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 type ToolDefinition = {
   type: "function";
@@ -19,12 +18,11 @@ interface FindHimAnswer {
   surname: string;
   accessLevel: number;
   powerPlant: string;
+  context: string;
 }
 
 const VERIFY_API_URL = "https://hub.ag3nts.org/verify";
 const FINDHIM_TASK_NAME = "findhim";
-const TOOL_NAME = "submit_findhim_answer";
-const formatter = new ConsoleMessageFormatterService();
 
 function getCourseApiKey(): string {
   const apiKey = process.env.COURSE_API_KEY;
@@ -36,7 +34,7 @@ function getCourseApiKey(): string {
 }
 
 function parseAnswer(args: Record<string, unknown>): FindHimAnswer {
-  const { name, surname, accessLevel, powerPlant } = args;
+  const { name, surname, accessLevel, powerPlant, context } = args;
 
   if (typeof name !== "string" || !name.trim()) {
     throw new Error("Tool argument 'name' must be a non-empty string");
@@ -54,12 +52,35 @@ function parseAnswer(args: Record<string, unknown>): FindHimAnswer {
     throw new Error("Tool argument 'powerPlant' must be a non-empty string");
   }
 
+  if (typeof context !== "string" || !context.trim()) {
+    throw new Error("Tool argument 'context' must be a non-empty string");
+  }
+
   return {
     name: name.trim(),
     surname: surname.trim(),
     accessLevel,
     powerPlant: powerPlant.trim(),
+    context: context.trim(),
   };
+}
+
+function toVerifyMessage(data: unknown): string {
+  if (typeof data === "string") {
+    return data;
+  }
+
+  if (typeof data === "object" && data !== null) {
+    const record = data as Record<string, unknown>;
+    const preferred = [record.message, record.msg, record.answer, record.result];
+    for (const item of preferred) {
+      if (typeof item === "string" && item.trim()) {
+        return item;
+      }
+    }
+  }
+
+  return JSON.stringify(data);
 }
 
 export const tools: ToolDefinition[] = [
@@ -67,7 +88,7 @@ export const tools: ToolDefinition[] = [
     type: "function",
     name: "submit_findhim_answer",
     description:
-      "Submits the final findhim task answer to the verification endpoint and returns the verification response.",
+      "Submits the final findhim answer to /verify. Use this only once you already know the final person, their accessLevel, and the powerPlant code.",
     parameters: {
       type: "object",
       properties: {
@@ -87,8 +108,17 @@ export const tools: ToolDefinition[] = [
           type: "string",
           description: "Power plant code, for example PWR1234PL.",
         },
+        context: {
+          type: "string",
+          description:
+            "Human-readable reasoning for this answer, e.g. 'Adam Nowicki z poziomem dostępu 3, lokalizowany najbliżej Elektrowni Bełchatów KRS123123'.",
+        },
+        confidence: {
+          type: "number",
+          description: "Agent's confidence (0.0–1.0) that this tool should be used for the current task.",
+        },
       },
-      required: ["name", "surname", "accessLevel", "powerPlant"],
+      required: ["name", "surname", "accessLevel", "powerPlant", "context", "confidence"],
       additionalProperties: false,
     },
     strict: true,
@@ -97,50 +127,32 @@ export const tools: ToolDefinition[] = [
 
 export const handlers = {
   async submit_findhim_answer(args: Record<string, unknown>): Promise<unknown> {
-    formatter.log({
-      type: "tool",
-      details: TOOL_NAME,
-      message: `Input: ${JSON.stringify(args)}`,
-    });
+    const answer = parseAnswer(args);
+    const apiKey = getCourseApiKey();
 
-    try {
-      const answer = parseAnswer(args);
-      const apiKey = getCourseApiKey();
-
-      const response = await axios.post<unknown>(
-        VERIFY_API_URL,
-        {
-          apikey: apiKey,
-          task: FINDHIM_TASK_NAME,
-          answer,
+    const response = await axios.post<unknown>(
+      VERIFY_API_URL,
+      {
+        apikey: apiKey,
+        task: FINDHIM_TASK_NAME,
+        answer,
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          validateStatus: () => true,
-        },
-      );
+        validateStatus: () => true,
+      },
+    );
 
-      const result = {
-        status: response.status,
-        data: response.data,
-      };
+    const verifyMessage = toVerifyMessage(response.data);
 
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Output: ${JSON.stringify(result)}`,
-      });
-
-      return result;
-    } catch (error: unknown) {
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
-      });
-      throw error;
-    }
+    return {
+      status: response.status,
+      data: response.data,
+      verifyMessage,
+      context: `${answer.name} ${answer.surname}, poziom dostępu ${answer.accessLevel}, elektrownia ${answer.powerPlant}`,
+      summary: `Wysłano finalną odpowiedź findhim dla ${answer.name} ${answer.surname}. Status verify: ${response.status}. Wiadomość verify: ${verifyMessage}`,
+    };
   },
 };

@@ -1,5 +1,4 @@
 import axios from "axios";
-import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 type ToolDefinition = {
   type: "function";
@@ -19,9 +18,14 @@ interface PersonIdentity {
   surname: string;
 }
 
+interface PersonLocationsResult {
+  name: string;
+  surname: string;
+  locations: Array<{ lat: number; lon: number }>;
+  locationCount: number;
+}
+
 const LOCATION_API_URL = "https://hub.ag3nts.org/api/location";
-const TOOL_NAME = "get_person_locations";
-const formatter = new ConsoleMessageFormatterService();
 
 function getCourseApiKey(): string {
   const apiKey = process.env.COURSE_API_KEY;
@@ -32,21 +36,76 @@ function getCourseApiKey(): string {
   return apiKey;
 }
 
-function validateIdentity(args: Record<string, unknown>): PersonIdentity {
-  const { name, surname } = args;
+function validateQueries(args: Record<string, unknown>): {
+  queries: PersonIdentity[];
+  context: string;
+} {
+  const rawQueries = args.queries;
+  const context = args.context;
 
-  if (typeof name !== "string" || !name.trim()) {
-    throw new Error("Tool argument 'name' must be a non-empty string");
+  if (!Array.isArray(rawQueries) || rawQueries.length === 0) {
+    throw new Error("Tool argument 'queries' must be a non-empty array");
   }
 
-  if (typeof surname !== "string" || !surname.trim()) {
-    throw new Error("Tool argument 'surname' must be a non-empty string");
+  if (typeof context !== "string" || !context.trim()) {
+    throw new Error("Tool argument 'context' must be a non-empty string");
   }
+
+  const queries = rawQueries.map((item, index) => {
+    if (typeof item !== "object" || item === null) {
+      throw new Error(`Tool argument 'queries[${index}]' must be an object`);
+    }
+
+    const query = item as Record<string, unknown>;
+    const name = query.name;
+    const surname = query.surname;
+
+    if (typeof name !== "string" || !name.trim()) {
+      throw new Error(`Tool argument 'queries[${index}].name' must be a non-empty string`);
+    }
+
+    if (typeof surname !== "string" || !surname.trim()) {
+      throw new Error(`Tool argument 'queries[${index}].surname' must be a non-empty string`);
+    }
+
+    return {
+      name: name.trim(),
+      surname: surname.trim(),
+    };
+  });
 
   return {
-    name: name.trim(),
-    surname: surname.trim(),
+    queries,
+    context: context.trim(),
   };
+}
+
+function normalizeLocations(data: unknown): Array<{ lat: number; lon: number }> {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data.flatMap((item) => {
+    if (typeof item !== "object" || item === null) {
+      return [];
+    }
+
+    const point = item as Record<string, unknown>;
+    const latitude = point.latitude;
+    const longitude = point.longitude;
+    const lat = point.lat;
+    const lon = point.lon;
+
+    if (typeof latitude === "number" && typeof longitude === "number") {
+      return [{ lat: latitude, lon: longitude }];
+    }
+
+    if (typeof lat === "number" && typeof lon === "number") {
+      return [{ lat, lon }];
+    }
+
+    return [];
+  });
 }
 
 export const tools: ToolDefinition[] = [
@@ -54,20 +113,42 @@ export const tools: ToolDefinition[] = [
     type: "function",
     name: "get_person_locations",
     description:
-      "Gets coordinates of locations where a specific person was seen, based on their name and surname.",
+      "Gets observed locations for one or more people in a single call. Prefer passing the full suspect list in queries so the model can compare all candidates without repeated requests.",
     parameters: {
       type: "object",
       properties: {
-        name: {
-          type: "string",
-          description: "Person first name.",
+        queries: {
+          type: "array",
+          description:
+            "List of people whose locations should be fetched. Prefer batching all suspects into one request.",
+          items: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "Person first name.",
+              },
+              surname: {
+                type: "string",
+                description: "Person surname.",
+              },
+            },
+            required: ["name", "surname"],
+            additionalProperties: false,
+          },
+          minItems: 1,
         },
-        surname: {
+        context: {
           type: "string",
-          description: "Person surname.",
+          description:
+            "Human-readable context describing why locations are being fetched, e.g. 'wszyscy podejrzani w zadaniu findhim'.",
+        },
+        confidence: {
+          type: "number",
+          description: "Agent's confidence (0.0–1.0) that this tool should be used for the current task.",
         },
       },
-      required: ["name", "surname"],
+      required: ["queries", "context", "confidence"],
       additionalProperties: false,
     },
     strict: true,
@@ -75,45 +156,45 @@ export const tools: ToolDefinition[] = [
 ];
 
 export const handlers = {
-  async get_person_locations(args: Record<string, unknown>): Promise<unknown> {
-    formatter.log({
-      type: "tool",
-      details: TOOL_NAME,
-      message: `Input: ${JSON.stringify(args)}`,
-    });
+  async get_person_locations(args: Record<string, unknown>): Promise<{
+    results: PersonLocationsResult[];
+    context: string;
+    summary: string;
+  }> {
+    const { queries, context } = validateQueries(args);
+    const apiKey = getCourseApiKey();
 
-    try {
-      const identity = validateIdentity(args);
-      const apiKey = getCourseApiKey();
+    const results = await Promise.all(
+      queries.map(async (identity) => {
+        const response = await axios.post(
+          LOCATION_API_URL,
+          {
+            apikey: apiKey,
+            name: identity.name,
+            surname: identity.surname,
+          },
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
 
-      const response = await axios.post(
-        LOCATION_API_URL,
-        {
-          apikey: apiKey,
+        const locations = normalizeLocations(response.data);
+
+        return {
           name: identity.name,
           surname: identity.surname,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      );
+          locations,
+          locationCount: locations.length,
+        };
+      }),
+    );
 
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Output: ${JSON.stringify(response.data)}`,
-      });
-
-      return response.data;
-    } catch (error: unknown) {
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
-      });
-      throw error;
-    }
+    return {
+      results,
+      context,
+      summary: `Pobrano lokalizacje dla ${results.length} osób w jednym wywołaniu.`,
+    };
   },
 };

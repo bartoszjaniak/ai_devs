@@ -1,5 +1,4 @@
 import axios from "axios";
-import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 type ToolDefinition = {
   type: "function";
@@ -20,9 +19,14 @@ interface AccessLevelInput {
   birthYear: number;
 }
 
+interface AccessLevelResult {
+  name: string;
+  surname: string;
+  birthYear: number;
+  accessLevel: number | null;
+}
+
 const ACCESS_LEVEL_API_URL = "https://hub.ag3nts.org/api/accesslevel";
-const TOOL_NAME = "get_access_level";
-const formatter = new ConsoleMessageFormatterService();
 
 function getCourseApiKey(): string {
   const apiKey = process.env.COURSE_API_KEY;
@@ -33,26 +37,74 @@ function getCourseApiKey(): string {
   return apiKey;
 }
 
-function parseInput(args: Record<string, unknown>): AccessLevelInput {
-  const { name, surname, birthYear } = args;
+function parseInput(args: Record<string, unknown>): {
+  queries: AccessLevelInput[];
+  context: string;
+} {
+  const rawQueries = args.queries;
+  const context = args.context;
 
-  if (typeof name !== "string" || !name.trim()) {
-    throw new Error("Tool argument 'name' must be a non-empty string");
+  if (!Array.isArray(rawQueries) || rawQueries.length === 0) {
+    throw new Error("Tool argument 'queries' must be a non-empty array");
   }
 
-  if (typeof surname !== "string" || !surname.trim()) {
-    throw new Error("Tool argument 'surname' must be a non-empty string");
+  if (typeof context !== "string" || !context.trim()) {
+    throw new Error("Tool argument 'context' must be a non-empty string");
   }
 
-  if (typeof birthYear !== "number" || Number.isNaN(birthYear)) {
-    throw new Error("Tool argument 'birthYear' must be a valid number");
-  }
+  const queries = rawQueries.map((item, index) => {
+    if (typeof item !== "object" || item === null) {
+      throw new Error(`Tool argument 'queries[${index}]' must be an object`);
+    }
+
+    const query = item as Record<string, unknown>;
+    const name = query.name;
+    const surname = query.surname;
+    const birthYear = query.birthYear;
+
+    if (typeof name !== "string" || !name.trim()) {
+      throw new Error(`Tool argument 'queries[${index}].name' must be a non-empty string`);
+    }
+
+    if (typeof surname !== "string" || !surname.trim()) {
+      throw new Error(`Tool argument 'queries[${index}].surname' must be a non-empty string`);
+    }
+
+    if (typeof birthYear !== "number" || Number.isNaN(birthYear)) {
+      throw new Error(`Tool argument 'queries[${index}].birthYear' must be a valid number`);
+    }
+
+    return {
+      name: name.trim(),
+      surname: surname.trim(),
+      birthYear,
+    };
+  });
 
   return {
-    name: name.trim(),
-    surname: surname.trim(),
-    birthYear,
+    queries,
+    context: context.trim(),
   };
+}
+
+function extractAccessLevel(data: unknown): number | null {
+  if (typeof data === "number" && !Number.isNaN(data)) {
+    return data;
+  }
+
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+
+  const record = data as Record<string, unknown>;
+  const candidates = [record.accessLevel, record.access_level, record.level];
+  for (const candidate of candidates) {
+    if (typeof candidate === "number" && !Number.isNaN(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 export const tools: ToolDefinition[] = [
@@ -60,24 +112,46 @@ export const tools: ToolDefinition[] = [
     type: "function",
     name: "get_access_level",
     description:
-      "Gets the access level number for a specific person based on their name, surname, and birth year.",
+      "Gets access levels for one or more people. In findhim, call this sequentially for one ranked candidate at a time (starting from the nearest), and move to the next candidate only if accessLevel equals 1.",
     parameters: {
       type: "object",
       properties: {
-        name: {
-          type: "string",
-          description: "Person first name.",
+        queries: {
+          type: "array",
+          description:
+            "List of people whose access level should be fetched. For findhim prefer a single-item list so ranking by distance is preserved.",
+          items: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "Person first name.",
+              },
+              surname: {
+                type: "string",
+                description: "Person surname.",
+              },
+              birthYear: {
+                type: "number",
+                description: "Person birth year as an integer.",
+              },
+            },
+            required: ["name", "surname", "birthYear"],
+            additionalProperties: false,
+          },
+          minItems: 1,
         },
-        surname: {
+        context: {
           type: "string",
-          description: "Person surname.",
+          description:
+            "Human-readable context describing why access levels are being checked, e.g. 'ranking kandydatów w zadaniu findhim'.",
         },
-        birthYear: {
+        confidence: {
           type: "number",
-          description: "Person birth year.",
+          description: "Agent's confidence (0.0–1.0) that this tool should be used for the current task.",
         },
       },
-      required: ["name", "surname", "birthYear"],
+      required: ["queries", "context", "confidence"],
       additionalProperties: false,
     },
     strict: true,
@@ -85,46 +159,44 @@ export const tools: ToolDefinition[] = [
 ];
 
 export const handlers = {
-  async get_access_level(args: Record<string, unknown>): Promise<unknown> {
-    formatter.log({
-      type: "tool",
-      details: TOOL_NAME,
-      message: `Input: ${JSON.stringify(args)}`,
-    });
+  async get_access_level(args: Record<string, unknown>): Promise<{
+    results: AccessLevelResult[];
+    context: string;
+    summary: string;
+  }> {
+    const input = parseInput(args);
+    const apiKey = getCourseApiKey();
 
-    try {
-      const input = parseInput(args);
-      const apiKey = getCourseApiKey();
-
-      const response = await axios.post(
-        ACCESS_LEVEL_API_URL,
-        {
-          apikey: apiKey,
-          name: input.name,
-          surname: input.surname,
-          birthYear: input.birthYear,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
+    const results = await Promise.all(
+      input.queries.map(async (query) => {
+        const response = await axios.post(
+          ACCESS_LEVEL_API_URL,
+          {
+            apikey: apiKey,
+            name: query.name,
+            surname: query.surname,
+            birthYear: query.birthYear,
           },
-        },
-      );
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
 
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Output: ${JSON.stringify(response.data)}`,
-      });
+        return {
+          name: query.name,
+          surname: query.surname,
+          birthYear: query.birthYear,
+          accessLevel: extractAccessLevel(response.data),
+        };
+      }),
+    );
 
-      return response.data;
-    } catch (error: unknown) {
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
-      });
-      throw error;
-    }
+    return {
+      results,
+      context: input.context,
+      summary: `Pobrano poziomy dostępu dla ${results.length} osób w jednym wywołaniu.`,
+    };
   },
 };

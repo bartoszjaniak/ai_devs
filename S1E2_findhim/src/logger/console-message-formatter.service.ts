@@ -10,7 +10,7 @@ interface LogMessage {
 
 const COLOR_BY_TYPE: Record<MessageType, string> = {
   user: '\u001b[34m',
-  agent: '\u001b[95m',
+  agent: '\u001b[35m',
   tool: '\u001b[38;5;208m',
 };
 

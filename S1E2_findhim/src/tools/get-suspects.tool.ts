@@ -1,12 +1,20 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ConsoleMessageFormatterService } from "../logger/console-message-formatter.service";
 
 interface Suspect {
   name: string;
   surname: string;
   gender: string;
   born: number;
+  city: string;
+  tags: string[];
+}
+
+interface NormalizedSuspect {
+  name: string;
+  surname: string;
+  gender: string;
+  birthYear: number;
   city: string;
   tags: string[];
 }
@@ -25,18 +33,22 @@ type ToolDefinition = {
 };
 
 const SUSPECTS_FILE_PATH = resolve(process.cwd(), "..", "suspects.json");
-const TOOL_NAME = "get_suspects";
-const formatter = new ConsoleMessageFormatterService();
 
 export const tools: ToolDefinition[] = [
   {
     type: "function",
     name: "get_suspects",
-    description: "Get suspect list from local suspects.json file.",
+    description:
+      "Loads the full suspect list from the local file and returns normalized records with birthYear. Call this once, then reuse the returned list for batched location and access-level checks.",
     parameters: {
       type: "object",
-      properties: {},
-      required: [],
+      properties: {
+        confidence: {
+          type: "number",
+          description: "Agent's confidence (0.0–1.0) that this tool should be used for the current task.",
+        },
+      },
+      required: ["confidence"],
       additionalProperties: false,
     },
     strict: true,
@@ -44,31 +56,25 @@ export const tools: ToolDefinition[] = [
 ];
 
 export const handlers = {
-  get_suspects(): Suspect[] {
-    formatter.log({
-      type: "tool",
-      details: TOOL_NAME,
-      message: "Input: {}",
-    });
+  get_suspects(): {
+    suspects: NormalizedSuspect[];
+    count: number;
+    summary: string;
+  } {
+    const fileContent = readFileSync(SUSPECTS_FILE_PATH, "utf8");
+    const suspects = (JSON.parse(fileContent) as Suspect[]).map((suspect) => ({
+      name: suspect.name,
+      surname: suspect.surname,
+      gender: suspect.gender,
+      birthYear: suspect.born,
+      city: suspect.city,
+      tags: suspect.tags,
+    }));
 
-    try {
-      const fileContent = readFileSync(SUSPECTS_FILE_PATH, "utf8");
-      const result = JSON.parse(fileContent) as Suspect[];
-
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Output: ${JSON.stringify(result)}`,
-      });
-
-      return result;
-    } catch (error: unknown) {
-      formatter.log({
-        type: "tool",
-        details: TOOL_NAME,
-        message: `Error: ${error instanceof Error ? error.message : String(error)}`,
-      });
-      throw error;
-    }
+    return {
+      suspects,
+      count: suspects.length,
+      summary: `Pobrano ${suspects.length} podejrzanych z danymi gotowymi do batchowego sprawdzania.`,
+    };
   },
 };
