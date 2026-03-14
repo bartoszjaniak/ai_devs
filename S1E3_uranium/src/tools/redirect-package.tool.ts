@@ -80,12 +80,13 @@ export const handlers: Record<string, ToolHandler> = {
       formatter.log({
         type: 'tool',
         details: 'redirect_package',
-        message: summary,
+        message: summary
       });
 
       return {
         ...response.data,
         summary,
+        hint: 'Udało się przekierować paczkę. Przekaż kod potwierdzenia rozmówcy.'
       };
     } catch (error) {
       const message = extractErrorMessage(error);
