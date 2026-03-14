@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import { AgentModule } from './agent/agent.module';
-import { ConsoleMessageFormatterService } from '../../shared/logger/console-message-formatter.service';
+import { DistributionContactModule } from './distribution-contact/distribution-contact.module';
 
 @Module({
   imports: [
@@ -14,7 +14,7 @@ import { ConsoleMessageFormatterService } from '../../shared/logger/console-mess
       ],
     }),
     AgentModule,
+    DistributionContactModule,
   ],
-  providers: [ConsoleMessageFormatterService],
 })
 export class AppModule {}

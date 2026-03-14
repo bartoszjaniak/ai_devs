@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AGENT_SYSTEM_PROMPT } from '../prompts/agent.prompt';
 import { OpenRouterService } from '../openrouter/openrouter.service';
-import { ConsoleMessageFormatterService } from '../logger/console-message-formatter.service';
+import { ConsoleMessageFormatterService } from '../../../shared/logger/console-message-formatter.service';
 import { AgentAnswer } from './models/agent-answer.model';
 import { ResponsesInputItem } from '../openrouter/openrouter.types';
 import { handlers, tools } from '../tools';

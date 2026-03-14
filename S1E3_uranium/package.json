@@ -1,36 +1,38 @@
 {
-  "name": "s1e2-findhim",
+  "name": "s1e3-uranium",
   "version": "0.0.1",
   "private": true,
-  "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "start": "node dist/S1E2_findhim/src/cli.js",
-    "start:dev": "ts-node -r tsconfig-paths/register src/cli.ts",
-    "ask": "ts-node -r tsconfig-paths/register src/cli.ts",
+    "start": "node dist/S1E3_uranium/src/main.js",
+    "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
+    "start:debug": "nest start --debug --watch",
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
     "axios": "^1.13.6",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.18.0",
+    "@eslint/eslintrc": "^3.1.0",
+    "@eslint/js": "^9.16.0",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
-    "@types/node": "^22.10.7",
-    "eslint": "^9.18.0",
+    "@nestjs/testing": "^11.0.1",
+    "@types/node": "^22.10.1",
+    "eslint": "^9.16.0",
     "eslint-config-prettier": "^10.0.1",
-    "eslint-plugin-prettier": "^5.2.2",
-    "globals": "^16.0.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "globals": "^15.13.0",
     "prettier": "^3.4.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.17.0"
   }
 }

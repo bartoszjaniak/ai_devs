@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AgentService } from './agent/agent.service';
-import { ConsoleMessageFormatterService } from './logger/console-message-formatter.service';
+import { ConsoleMessageFormatterService } from '../../shared/logger/console-message-formatter.service';
 
 function readQuestionFromArgs(): string {
   return process.argv.slice(2).join(' ').trim();

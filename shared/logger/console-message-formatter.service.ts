@@ -1,5 +1,3 @@
-import { Injectable } from '@nestjs/common';
-
 export type MessageType = 'agent' | 'tool' | 'user';
 
 interface LogMessage {
@@ -17,7 +15,6 @@ const COLOR_BY_TYPE: Record<MessageType, string> = {
 const RESET_COLOR = '\u001b[0m';
 const MAX_CONTENT_WIDTH = 80;
 
-@Injectable()
 export class ConsoleMessageFormatterService {
   format({ type, message, details }: LogMessage): string {
     const title = this.buildTitle(type, details);
